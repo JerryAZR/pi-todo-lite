@@ -1,7 +1,14 @@
 {
-  "name": "pi-todo-lite",
+  "name": "@jerryan/pi-todo-lite",
   "version": "0.1.0",
   "type": "module",
+  "description": "A lightweight task tracker extension for the pi coding agent.",
+  "author": "JerryAZR",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git@github.com:JerryAZR/pi-todo-lite.git"
+  },
   "scripts": {
     "test": "vitest run"
   },
