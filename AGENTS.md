@@ -1,251 +1,75 @@
-# Pi Extension Development Guide
+# Pi Extension Development — Quick Reference
 
-A quick reference for developing [pi](https://github.com/badlogic/pi-mono) extensions, based on the patterns used in `pi-todo-lite`.
+## Official documentation (local)
 
-## Extension basics
+| Topic | Path |
+|-------|------|
+| **Extensions API** | `~\AppData\Roaming\npm\node_modules\@mariozechner\pi-coding-agent\docs\extensions.md` |
+| **TUI / Custom rendering** | `~\AppData\Roaming\npm\node_modules\@mariozechner\pi-coding-agent\docs\tui.md` |
+| **Themes** | `~\AppData\Roaming\npm\node_modules\@mariozechner\pi-coding-agent\docs\themes.md` |
+| **Keybindings** | `~\AppData\Roaming\npm\node_modules\@mariozechner\pi-coding-agent\docs\keybindings.md` |
+| **Sessions / branching** | `~\AppData\Roaming\npm\node_modules\@mariozechner\pi-coding-agent\docs\sessions.md` |
+| **Examples** | `~\AppData\Roaming\npm\node_modules\@mariozechner\pi-coding-agent\examples\extensions\` |
 
-An extension is a TypeScript module that exports a **default factory function** receiving `ExtensionAPI`:
+The **extensions.md** doc is the canonical reference for:
+- All lifecycle events (`session_start`, `tool_call`, `tool_result`, `agent_start`, etc.)
+- `ExtensionAPI` methods (`registerTool`, `registerCommand`, `on`, `sendMessage`, etc.)
+- `ExtensionContext` properties (`ctx.ui`, `ctx.sessionManager`, `ctx.signal`, etc.)
+- Custom tool definition, custom rendering, custom UI components
+- State management patterns (`appendEntry`, tool-result `details`)
 
-```typescript
-import type { ExtensionAPI } from "@mariozechner/pi-coding-agent";
+The **tui.md** doc covers:
+- `Text`, `Container`, `Box` components
+- `setWidget`, `setStatus`, `setFooter`, `setWorkingIndicator`
+- `ctx.ui.custom()` for modal/overlays
+- Theme colors and `keyHint()`
 
-export default function (pi: ExtensionAPI) {
-  // Subscribe to events, register tools, commands, etc.
-}
-```
+## Key examples (local)
 
-Extensions are loaded via [jiti](https://github.com/unjs/jiti) — no build step needed. Put them in:
-- `~/.pi/agent/extensions/*.ts` (global)
-- `./.pi/extensions/*.ts` (project-local)
+| Example | What it demonstrates | Path |
+|---------|---------------------|------|
+| `todo.ts` | Stateful tool with persistence, `renderCall`/`renderResult`, `/command` | `~\AppData\Roaming\npm\node_modules\@mariozechner\pi-coding-agent\examples\extensions\todo.ts` |
+| `dynamic-tools.ts` | Register tools after startup | `~\AppData\Roaming\npm\node_modules\@mariozechner\pi-coding-agent\examples\extensions\dynamic-tools.ts` |
+| `widget-placement.ts` | Widget above/below editor | `~\AppData\Roaming\npm\node_modules\@mariozechner\pi-coding-agent\examples\extensions\widget-placement.ts` |
+| `permission-gate.ts` | `tool_call` event blocking | `~\AppData\Roaming\npm\node_modules\@mariozechner\pi-coding-agent\examples\extensions\permission-gate.ts` |
+| `custom-compaction.ts` | `session_before_compact` / `session_compact` | `~\AppData\Roaming\npm\node_modules\@mariozechner\pi-coding-agent\examples\extensions\custom-compaction.ts` |
 
-## Core concepts
+## Project-specific notes
 
-### ExtensionAPI
-
-The `pi` object provides:
-
-| Method | Purpose |
-|--------|---------|
-| `pi.on(event, handler)` | Subscribe to lifecycle events |
-| `pi.registerTool(def)` | Register a tool callable by the LLM |
-| `pi.registerCommand(name, opts)` | Register a `/slash` command |
-| `pi.registerShortcut(key, opts)` | Register a keyboard shortcut |
-| `pi.registerFlag(name, opts)` | Register a CLI flag |
-| `pi.sendMessage(msg, opts)` | Inject a message into the session |
-| `pi.sendUserMessage(text, opts)` | Inject a user message (triggers a turn) |
-| `pi.appendEntry(type, data)` | Persist extension state in the session file |
-| `pi.events.on/emit` | Inter-extension event bus |
-
-### ExtensionContext
-
-All event handlers receive `ctx: ExtensionContext`:
-
-| Property | Purpose |
-|----------|---------|
-| `ctx.ui` | TUI interaction (select, confirm, input, notify, setWidget, etc.) |
-| `ctx.hasUI` | `false` in print/JSON mode — check before using UI methods |
-| `ctx.sessionManager` | Read session entries, get branch, labels |
-| `ctx.cwd` | Current working directory |
-| `ctx.signal` | AbortSignal for the current turn (use for fetch, etc.) |
-| `ctx.getSystemPrompt()` | Current system prompt string |
-| `ctx.getContextUsage()` | Current token usage estimate |
-
-## Events
-
-Key lifecycle events (see [extensions.md](https://github.com/badlogic/pi-mono/blob/main/packages/coding-agent/docs/extensions.md) for full list):
+### Architecture
 
 ```
-session_start           → Extension loaded, reconstruct state
-session_compact         → Compaction finished, re-scan branch
-session_tree            → Tree navigation, re-scan branch
-session_shutdown        → Cleanup, save state
-
-agent_start             → New user prompt, hide old completed tasks
-agent_end               → Turn finished
-
-tool_execution_start    → Tool about to run
-tool_execution_end      → Tool finished (success or error)
-tool_call               → Can block or mutate args before execution
-tool_result             → Can modify result before it reaches LLM
-
-before_agent_start      → Can inject messages, modify system prompt
+core.ts       → Pure logic: types, reducer, replay, formatting. Zero pi deps. Unit-testable.
+extension.ts  → Pi integration: event handlers, tool/command registration, widget.
+core.test.ts  → Vitest tests for the reducer.
 ```
 
-## Tools
+### Multi-tool pattern
 
-### Registration
+This extension uses **6 separate tools** (`todo_create`, `todo_update`, `todo_list`, `todo_get`, `todo_delete`, `todo_clear`) instead of a single `action`-switch tool. Each has a tight schema with no dead-weight parameters. See `extension.ts` for the registration pattern.
 
-```typescript
-import { StringEnum } from "@mariozechner/pi-ai";
-import { Type } from "typebox";
+### State persistence
 
-pi.registerTool({
-  name: "my_tool",
-  label: "My Tool",
-  description: "What this tool does — shown to LLM",
-  promptSnippet: "One-line summary for Available tools section",
-  promptGuidelines: [
-    "When to use this tool — flat bullets appended to system prompt Guidelines",
-  ],
-  parameters: Type.Object({
-    action: StringEnum(["list", "add"] as const),
-    text: Type.Optional(Type.String()),
-  }),
+State is stored in **tool result `details`** (full task array snapshot) and reconstructed by replaying the session branch on `session_start` / `session_compact` / `session_tree`. See `core.ts:replayFromBranch()` and `extension.ts:syncState()`.
 
-  async execute(toolCallId, params, signal, onUpdate, ctx) {
-    // Return result
-    return {
-      content: [{ type: "text", text: "Done" }],
-      details: { data: "opaque" },
-    };
-  },
+### Render sharing
 
-  renderCall(args, theme, context) {
-    // Custom TUI rendering for the tool call row
-    return new Text(theme.fg("toolTitle", "my_tool"), 0, 0);
-  },
+All 6 tools share `renderTodoResult()` and `buildToolResult()` helpers, but each has its own `renderCall` for per-tool glyph display.
 
-  renderResult(result, { expanded, isPartial }, theme, context) {
-    // Custom TUI rendering for the result row
-    return new Text(theme.fg("success", "✓"), 0, 0);
-  },
-});
+## Running this extension locally
+
+```bash
+# Quick test
+pi -e ./extension.ts
+
+# Or install to global extensions
+mkdir -p ~/.pi/agent/extensions
+cp extension.ts ~/.pi/agent/extensions/
 ```
 
-### Return shape
+## Running tests
 
-```typescript
-{
-  content: [{ type: "text", text: "Visible to LLM" }],
-  details: { /* Opaque — for rendering & state persistence, NOT visible to LLM */ },
-}
+```bash
+npm install
+npm test
 ```
-
-- `content` — goes into LLM context as the tool result
-- `details` — stored in session file, passed to `renderResult()`, used for replay
-
-### Multi-tool vs single-tool
-
-**Single tool with mode switch** (smaller prompt footprint):
-```typescript
-pi.registerTool({ name: "todo", parameters: { action: StringEnum(["create", "update", ...]) } })
-```
-
-**Multi-tool** (tighter schemas, clearer per-tool descriptions):
-```typescript
-pi.registerTool({ name: "todo_create", parameters: { subject: Type.String() } })
-pi.registerTool({ name: "todo_update", parameters: { id: Type.Number(), done: Type.Optional(Type.Boolean()) } })
-// ...
-```
-
-Use **multi-tool** when:
-- Schemas are sparse (different actions need different params)
-- Per-tool "when to use" guidance is distinct
-- You want the LLM to see action names in the tool list
-
-## State persistence
-
-### Pattern: tool result details
-
-Store the full state snapshot in every tool's `details`. On lifecycle events, replay from the session branch:
-
-```typescript
-function replayFromBranch(ctx: ExtensionContext) {
-  let state = EMPTY_STATE;
-  for (const entry of ctx.sessionManager.getBranch()) {
-    if (entry.type === "message" && entry.message.role === "toolResult" && entry.message.toolName === "my_tool") {
-      const details = entry.message.details as MyDetails | undefined;
-      if (details?.tasks) state = { tasks: details.tasks, nextId: details.nextId };
-    }
-  }
-  return state;
-}
-
-pi.on("session_start", async (_event, ctx) => {
-  state = replayFromBranch(ctx);
-});
-```
-
-**Pros:** Survives branching, forking, tree navigation. No external files.
-**Cons:** If ALL tool results are compacted away, state resets to empty.
-
-### Pattern: appendEntry
-
-For data that must survive compaction:
-
-```typescript
-pi.appendEntry("my-state", { count: 42 });
-
-// Restore:
-for (const entry of ctx.sessionManager.getBranch()) {
-  if (entry.type === "custom" && entry.customType === "my-state") {
-    state = entry.data;
-  }
-}
-```
-
-`appendEntry` writes to the session file but does NOT participate in LLM context.
-
-## Widgets
-
-Persistent UI above/below the editor:
-
-```typescript
-ctx.ui.setWidget("my-widget", (tui, theme) => ({
-  render(width: number): string[] {
-    return [theme.fg("accent", "Hello")];
-  },
-  invalidate() {},
-}), { placement: "aboveEditor" });
-
-// Remove:
-ctx.ui.setWidget("my-widget", undefined);
-```
-
-Use `tui.requestRender()` to refresh without re-registering.
-
-## Commands
-
-```typescript
-pi.registerCommand("my-cmd", {
-  description: "What this does",
-  handler: async (args, ctx) => {
-    ctx.ui.notify("Hello!", "info");
-  },
-});
-```
-
-Invoked as `/my-cmd` or `/my-cmd args`.
-
-## Key imports
-
-| Package | What | Example |
-|---------|------|---------|
-| `@mariozechner/pi-coding-agent` | Extension types, events, `isToolCallEventType` | `ExtensionAPI`, `ExtensionContext` |
-| `@mariozechner/pi-ai` | `StringEnum` for Google-compatible enums | `StringEnum(["a", "b"] as const)` |
-| `@mariozechner/pi-tui` | TUI components | `Text`, `Container`, `truncateToWidth` |
-| `typebox` | Schema definitions | `Type.Object({ ... })` |
-
-## Testing
-
-Test pure logic without loading pi:
-
-```typescript
-import { describe, it, expect } from "vitest";
-import { applyAction } from "./core.js";
-
-describe("create", () => {
-  it("adds a task", () => {
-    const result = applyAction(EMPTY_STATE, "create", { subject: "Fix bug" });
-    expect(result.state.tasks).toHaveLength(1);
-  });
-});
-```
-
-Keep pi-dependent code (`extension.ts`) thin. Put business logic in a pure module (`core.ts`) with zero pi imports.
-
-## Official docs
-
-- [extensions.md](https://github.com/badlogic/pi-mono/blob/main/packages/coding-agent/docs/extensions.md) — Full event reference, API, examples
-- [tui.md](https://github.com/badlogic/pi-mono/blob/main/packages/coding-agent/docs/tui.md) — Custom components, widgets, rendering
-- [examples/extensions/](https://github.com/badlogic/pi-mono/tree/main/packages/coding-agent/examples/extensions) — Working code (todo.ts, plan-mode, ssh, etc.)
