@@ -279,9 +279,8 @@ export default function (pi: ExtensionAPI) {
 	});
 
 	pi.on("tool_execution_end", async (event) => {
-		if (isTodoTool(event.toolName) && !event.isError) {
-			todoToolUsedThisTurn = true;
-		}
+		if (!isTodoTool(event.toolName) || event.isError) return;
+		todoToolUsedThisTurn = true;
 		overlay?.update();
 	});
 
