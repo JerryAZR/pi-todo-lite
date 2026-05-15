@@ -31,32 +31,13 @@ export function commitState(next: TaskState): void {
 }
 
 // ---------------------------------------------------------------------------
-// Reminder tracking
+// Reminder tracking — single counter, all logic in agent_end
 // ---------------------------------------------------------------------------
 
 const REMINDER_INTERVAL = 3;
-let currentTurn = 0;
-let lastActionTurn = 0;
-let oldestPendingId: number | null = null;
-
-function updateOldestPending(): void {
-	const pending = state.tasks.filter((t) => !t.done);
-	if (pending.length === 0) {
-		oldestPendingId = null;
-		return;
-	}
-	const oldest = pending[0];
-	if (oldestPendingId !== oldest.id) {
-		oldestPendingId = oldest.id;
-		lastActionTurn = currentTurn;
-	}
-}
-
-function trackActionOnOldest(taskId?: number): void {
-	if (oldestPendingId !== null && taskId === oldestPendingId) {
-		lastActionTurn = currentTurn;
-	}
-}
+let turnsSinceAction = 0;
+let previousOldestId: number | null = null;
+let todoToolUsedThisTurn = false;
 
 function findSubject(id: number): string {
 	return state.tasks.find((t) => t.id === id)?.subject ?? `#${id}`;
@@ -217,7 +198,13 @@ export default function (pi: ExtensionAPI) {
 		replaceState(replayFromBranch(ctx.sessionManager.getBranch()));
 		overlay?.reset();
 		overlay?.update();
-		updateOldestPending();
+
+		const pending = state.tasks.filter((t) => !t.done);
+		const newOldestId = pending[0]?.id ?? null;
+		if (newOldestId !== previousOldestId) {
+			previousOldestId = newOldestId;
+			turnsSinceAction = 0;
+		}
 	};
 
 	pi.on("session_start", async (_event, ctx) => {
@@ -245,36 +232,56 @@ export default function (pi: ExtensionAPI) {
 	});
 
 	pi.on("agent_start", async () => {
-		currentTurn++;
-		updateOldestPending();
 		overlay?.hideDoneFromPreviousTurn();
 	});
 
 	pi.on("agent_end", async (_event, ctx) => {
-		if (oldestPendingId === null) return;
-		if (currentTurn - lastActionTurn < REMINDER_INTERVAL) return;
-		if (ctx.hasPendingMessages()) return;
+		const pending = state.tasks.filter((t) => !t.done);
+		const oldest = pending[0] ?? null;
+		const oldestId = oldest?.id ?? null;
 
-		const oldest = state.tasks.find((t) => t.id === oldestPendingId);
-		if (!oldest || oldest.done) {
-			oldestPendingId = null;
+		// Oldest task changed — reset baseline
+		if (oldestId !== previousOldestId) {
+			previousOldestId = oldestId;
+			turnsSinceAction = 0;
+			todoToolUsedThisTurn = false;
 			return;
 		}
 
-		pi.sendUserMessage(
-			`Reminder: Task #${oldest.id} "${oldest.subject}" is still pending. ` +
-				`If you've completed it, call todo_update with id: ${oldest.id}, done: true.`,
-			{ deliverAs: "followUp" },
-		);
-		lastActionTurn = currentTurn;
+		// Todo tool acted this turn — reset counter
+		if (todoToolUsedThisTurn) {
+			turnsSinceAction = 0;
+			todoToolUsedThisTurn = false;
+			return;
+		}
+
+		// No pending tasks — nothing to remind about
+		if (oldestId === null) {
+			turnsSinceAction = 0;
+			todoToolUsedThisTurn = false;
+			return;
+		}
+
+		// Count idle turns
+		turnsSinceAction++;
+
+		// Fire reminder if threshold reached
+		if (turnsSinceAction >= REMINDER_INTERVAL && !ctx.hasPendingMessages()) {
+			pi.sendUserMessage(
+				`Reminder: Task #${oldest.id} "${oldest.subject}" is still pending. ` +
+					`If you've completed it, call todo_update with id: ${oldest.id}, done: true.`,
+				{ deliverAs: "followUp" },
+			);
+			turnsSinceAction = 0;
+		}
+
+		todoToolUsedThisTurn = false;
 	});
 
 	pi.on("tool_execution_end", async (event) => {
-		if (!isTodoTool(event.toolName) || event.isError) {
-			overlay?.update();
-			return;
+		if (isTodoTool(event.toolName) && !event.isError) {
+			todoToolUsedThisTurn = true;
 		}
-		updateOldestPending();
 		overlay?.update();
 	});
 
@@ -332,7 +339,6 @@ export default function (pi: ExtensionAPI) {
 		async execute(_toolCallId, params, _signal, _onUpdate, _ctx) {
 			const result = applyAction(state, "update", params as Record<string, unknown>);
 			commitState(result.state);
-			trackActionOnOldest(params.id as number);
 			return buildToolResult("update", result);
 		},
 
@@ -415,7 +421,6 @@ export default function (pi: ExtensionAPI) {
 		async execute(_toolCallId, params, _signal, _onUpdate, _ctx) {
 			const result = applyAction(state, "delete", params as Record<string, unknown>);
 			commitState(result.state);
-			trackActionOnOldest(params.id as number);
 			return buildToolResult("delete", result);
 		},
 
