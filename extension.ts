@@ -262,6 +262,9 @@ export default function (pi: ExtensionAPI) {
 		description:
 			"Update a task's subject, description, or done status. Use todo_update's appendNote parameter to add a paragraph without replacing existing text. Batch multiple fields in a single call.",
 		promptSnippet: "Update a task in the todo list",
+		promptGuidelines: [
+			"When you finish a task, call todo_update with id and done: true.",
+		],
 		parameters: Type.Object({
 			id: Type.Number({ description: "Task id to update" }),
 			subject: Type.Optional(Type.String({ description: "Replace the subject line" })),
