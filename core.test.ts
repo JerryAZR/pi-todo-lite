@@ -5,10 +5,14 @@
 import { describe, expect, it } from "vitest";
 import {
 	applyAction,
+	checkReminder,
+	createReminderState,
 	EMPTY_STATE,
 	formatTaskDetail,
 	formatTaskLine,
+	markTodoTouched,
 	replayFromBranch,
+	syncReminderState,
 	type BranchEntry,
 	type TaskState,
 } from "./core.js";
@@ -271,5 +275,107 @@ describe("formatTaskDetail", () => {
 	it("omits description when absent", () => {
 		const t = { id: 1, subject: "A", done: true };
 		expect(formatTaskDetail(t)).toBe("#1 [done] A");
+	});
+});
+
+// ---------------------------------------------------------------------------
+// reminder
+// ---------------------------------------------------------------------------
+
+describe("syncReminderState", () => {
+	it("resets counter when oldest changes", () => {
+		const r = createReminderState();
+		r.turnsSinceAction = 2;
+		const s = state([{ id: 1, subject: "A", done: false }], 2);
+		syncReminderState(r, s);
+		expect(r.previousOldestId).toBe(1);
+		expect(r.turnsSinceAction).toBe(0);
+	});
+
+	it("preserves counter when oldest unchanged", () => {
+		const r = createReminderState();
+		r.previousOldestId = 1;
+		r.turnsSinceAction = 2;
+		const s = state([{ id: 1, subject: "A", done: false }], 2);
+		syncReminderState(r, s);
+		expect(r.turnsSinceAction).toBe(2);
+	});
+});
+
+describe("markTodoTouched", () => {
+	it("records the touched task id", () => {
+		const r = createReminderState();
+		markTodoTouched(r, 5);
+		expect(r.lastTouchedId).toBe(5);
+	});
+});
+
+describe("checkReminder", () => {
+	it("returns null and resets when no pending tasks", () => {
+		const r = createReminderState();
+		r.turnsSinceAction = 5;
+		const s = state([], 1);
+		expect(checkReminder(r, s)).toBeNull();
+		expect(r.turnsSinceAction).toBe(0);
+	});
+
+	it("returns null and resets when oldest changes", () => {
+		const r = createReminderState();
+		r.previousOldestId = 1;
+		r.turnsSinceAction = 5;
+		const s = state([{ id: 2, subject: "B", done: false }], 3);
+		expect(checkReminder(r, s)).toBeNull();
+		expect(r.previousOldestId).toBe(2);
+		expect(r.turnsSinceAction).toBe(0);
+	});
+
+	it("returns null and resets when oldest was touched this turn", () => {
+		const r = createReminderState();
+		r.previousOldestId = 1;
+		r.lastTouchedId = 1;
+		r.turnsSinceAction = 5;
+		const s = state([{ id: 1, subject: "A", done: false }], 2);
+		expect(checkReminder(r, s)).toBeNull();
+		expect(r.turnsSinceAction).toBe(0);
+		expect(r.lastTouchedId).toBeNull();
+	});
+
+	it("increments counter on idle turns", () => {
+		const r = createReminderState();
+		r.previousOldestId = 1;
+		const s = state([{ id: 1, subject: "A", done: false }], 2);
+		expect(checkReminder(r, s)).toBeNull();
+		expect(r.turnsSinceAction).toBe(1);
+		expect(checkReminder(r, s)).toBeNull();
+		expect(r.turnsSinceAction).toBe(2);
+	});
+
+	it("fires reminder after 3 idle turns and resets counter", () => {
+		const r = createReminderState();
+		r.previousOldestId = 1;
+		r.turnsSinceAction = 2;
+		const s = state([{ id: 1, subject: "A", done: false }], 2);
+		const text = checkReminder(r, s);
+		expect(text).not.toBeNull();
+		expect(text).toContain("Task #1 \"A\" is still pending");
+		expect(text).toContain("<system-reminder>");
+		expect(text).toContain("</system-reminder>");
+		expect(r.turnsSinceAction).toBe(0);
+	});
+
+	it("does not fire when a non-oldest task was touched", () => {
+		const r = createReminderState();
+		r.previousOldestId = 1;
+		r.lastTouchedId = 2;
+		r.turnsSinceAction = 5;
+		const s = state(
+			[
+				{ id: 1, subject: "A", done: false },
+				{ id: 2, subject: "B", done: false },
+			],
+			3,
+		);
+		expect(checkReminder(r, s)).not.toBeNull();
+		expect(r.turnsSinceAction).toBe(0);
 	});
 });

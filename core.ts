@@ -26,19 +26,19 @@ export interface TodoDetails {
 }
 
 // ---------------------------------------------------------------------------
-// Reminder tracking
+// Reminder tracking — all state and decisions live in core
 // ---------------------------------------------------------------------------
 
-export const REMINDER_INTERVAL = 3;
+const REMINDER_INTERVAL = 3;
 
 export interface ReminderState {
 	turnsSinceAction: number;
 	previousOldestId: number | null;
-	wasResetThisTurn: boolean;
+	lastTouchedId: number | null;
 }
 
 export function createReminderState(): ReminderState {
-	return { turnsSinceAction: 0, previousOldestId: null, wasResetThisTurn: false };
+	return { turnsSinceAction: 0, previousOldestId: null, lastTouchedId: null };
 }
 
 function getOldestPendingId(state: TaskState): number | null {
@@ -46,40 +46,66 @@ function getOldestPendingId(state: TaskState): number | null {
 	return pending[0]?.id ?? null;
 }
 
-export function updateReminderState(
-	reminder: ReminderState,
-	state: TaskState,
-	touchedId?: number,
-	setFlag = true,
-): void {
+/** Sync reminder baseline after state reconstruction (replay, compact, tree). */
+export function syncReminderState(reminder: ReminderState, state: TaskState): void {
 	const oldestId = getOldestPendingId(state);
-
 	if (oldestId !== reminder.previousOldestId) {
 		reminder.previousOldestId = oldestId;
 		reminder.turnsSinceAction = 0;
-		if (setFlag) reminder.wasResetThisTurn = true;
-		return;
+		reminder.lastTouchedId = null;
 	}
+}
 
-	if (oldestId !== null && touchedId === oldestId) {
+/** Record that a todo tool acted on a specific task. Called from execute handlers. */
+export function markTodoTouched(reminder: ReminderState, taskId: number): void {
+	reminder.lastTouchedId = taskId;
+}
+
+/** Called at the end of an agent turn. Updates state and returns a reminder string, or null. */
+export function checkReminder(reminder: ReminderState, state: TaskState): string | null {
+	const oldestId = getOldestPendingId(state);
+
+	// Oldest task changed — reset baseline
+	if (oldestId !== reminder.previousOldestId) {
+		reminder.previousOldestId = oldestId;
 		reminder.turnsSinceAction = 0;
-		if (setFlag) reminder.wasResetThisTurn = true;
-		return;
+		reminder.lastTouchedId = null;
+		return null;
 	}
 
+	// No pending tasks — nothing to remind about
 	if (oldestId === null) {
 		reminder.turnsSinceAction = 0;
-		if (setFlag) reminder.wasResetThisTurn = true;
-		return;
+		reminder.lastTouchedId = null;
+		return null;
 	}
-}
 
-export function incrementReminderCounter(reminder: ReminderState): void {
+	// Oldest task was touched this turn — reset counter
+	if (reminder.lastTouchedId === oldestId) {
+		reminder.turnsSinceAction = 0;
+		reminder.lastTouchedId = null;
+		return null;
+	}
+
+	// Count idle turns
 	reminder.turnsSinceAction++;
-}
+	reminder.lastTouchedId = null;
 
-export function shouldFireReminder(reminder: ReminderState): boolean {
-	return reminder.turnsSinceAction >= REMINDER_INTERVAL;
+	// Fire reminder if threshold reached
+	if (reminder.turnsSinceAction >= REMINDER_INTERVAL) {
+		const oldest = state.tasks.find((t) => t.id === oldestId)!;
+		reminder.turnsSinceAction = 0;
+		return (
+			`<system-reminder>\n` +
+			`Task #${oldest.id} "${oldest.subject}" is still pending. ` +
+			`If you've completed it, call todo_update with id: ${oldest.id}, done: true. ` +
+			`If you are actively working on it but requirements or progress have changed, ` +
+			`update the task or add a note with todo_update accordingly.\n` +
+			`</system-reminder>`
+		);
+	}
+
+	return null;
 }
 
 export type TaskAction = "create" | "update" | "list" | "get" | "delete" | "clear";

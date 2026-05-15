@@ -8,13 +8,13 @@ import { Text, truncateToWidth, type TUI } from "@mariozechner/pi-tui";
 import { Type } from "typebox";
 import {
 	applyAction,
+	checkReminder,
 	createReminderState,
 	formatTaskLine,
-	incrementReminderCounter,
 	isTodoTool,
+	markTodoTouched,
 	replayFromBranch,
-	shouldFireReminder,
-	updateReminderState,
+	syncReminderState,
 	type Task,
 	type TaskState,
 	type TodoDetails,
@@ -197,7 +197,7 @@ export default function (pi: ExtensionAPI) {
 
 	const syncState = (ctx: ExtensionContext) => {
 		replaceState(replayFromBranch(ctx.sessionManager.getBranch()));
-		updateReminderState(reminder, state, undefined, false);
+		syncReminderState(reminder, state);
 		overlay?.reset();
 		overlay?.update();
 	};
@@ -231,26 +231,9 @@ export default function (pi: ExtensionAPI) {
 	});
 
 	pi.on("agent_end", async (_event, ctx) => {
-		if (!reminder.wasResetThisTurn) {
-			incrementReminderCounter(reminder);
-		}
-		reminder.wasResetThisTurn = false;
-
-		if (shouldFireReminder(reminder) && !ctx.hasPendingMessages()) {
-			const pending = state.tasks.filter((t) => !t.done);
-			const oldest = pending[0] ?? null;
-			if (oldest) {
-				pi.sendUserMessage(
-					`<system-reminder>
-Task #${oldest.id} "${oldest.subject}" is still pending. ` +
-						`If you've completed it, call todo_update with id: ${oldest.id}, done: true. ` +
-						`If you are actively working on it but requirements or progress have changed, ` +
-						`update the task or add a note with todo_update accordingly.
-</system-reminder>`,
-					{ deliverAs: "followUp" },
-				);
-				reminder.turnsSinceAction = 0;
-			}
+		const reminderText = checkReminder(reminder, state);
+		if (reminderText && !ctx.hasPendingMessages()) {
+			pi.sendUserMessage(reminderText, { deliverAs: "followUp" });
 		}
 	});
 
@@ -277,7 +260,8 @@ Task #${oldest.id} "${oldest.subject}" is still pending. ` +
 		async execute(_toolCallId, params, _signal, _onUpdate, _ctx) {
 			const result = applyAction(state, "create", params as Record<string, unknown>);
 			commitState(result.state);
-			updateReminderState(reminder, result.state);
+			const newTask = result.state.tasks[result.state.tasks.length - 1];
+			if (newTask) markTodoTouched(reminder, newTask.id);
 			return buildToolResult("create", result);
 		},
 
@@ -314,7 +298,7 @@ Task #${oldest.id} "${oldest.subject}" is still pending. ` +
 		async execute(_toolCallId, params, _signal, _onUpdate, _ctx) {
 			const result = applyAction(state, "update", params as Record<string, unknown>);
 			commitState(result.state);
-			updateReminderState(reminder, result.state, params.id as number);
+			markTodoTouched(reminder, params.id as number);
 			return buildToolResult("update", result);
 		},
 
@@ -370,7 +354,7 @@ Task #${oldest.id} "${oldest.subject}" is still pending. ` +
 		async execute(_toolCallId, params, _signal, _onUpdate, _ctx) {
 			const result = applyAction(state, "get", params as Record<string, unknown>);
 			commitState(result.state);
-			updateReminderState(reminder, result.state, params.id as number);
+			markTodoTouched(reminder, params.id as number);
 			return buildToolResult("get", result);
 		},
 
@@ -398,7 +382,7 @@ Task #${oldest.id} "${oldest.subject}" is still pending. ` +
 		async execute(_toolCallId, params, _signal, _onUpdate, _ctx) {
 			const result = applyAction(state, "delete", params as Record<string, unknown>);
 			commitState(result.state);
-			updateReminderState(reminder, result.state, params.id as number);
+			markTodoTouched(reminder, params.id as number);
 			return buildToolResult("delete", result);
 		},
 
@@ -424,7 +408,6 @@ Task #${oldest.id} "${oldest.subject}" is still pending. ` +
 		async execute(_toolCallId, _params, _signal, _onUpdate, _ctx) {
 			const result = applyAction(state, "clear", {});
 			commitState(result.state);
-			updateReminderState(reminder, result.state);
 			return buildToolResult("clear", result);
 		},
 
