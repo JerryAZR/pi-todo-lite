@@ -37,7 +37,7 @@ export function commitState(next: TaskState): void {
 const REMINDER_INTERVAL = 3;
 let turnsSinceAction = 0;
 let previousOldestId: number | null = null;
-let todoToolUsedThisTurn = false;
+const touchedTodoIds = new Set<number>();
 
 function findSubject(id: number): string {
 	return state.tasks.find((t) => t.id === id)?.subject ?? `#${id}`;
@@ -248,17 +248,17 @@ export default function (pi: ExtensionAPI) {
 			return;
 		}
 
-		// Todo tool acted this turn — reset counter
-		if (todoToolUsedThisTurn) {
+		// Oldest task was touched this turn — reset counter
+		if (oldestId !== null && touchedTodoIds.has(oldestId)) {
 			turnsSinceAction = 0;
-			todoToolUsedThisTurn = false;
+			touchedTodoIds.clear();
 			return;
 		}
 
 		// No pending tasks — nothing to remind about
 		if (oldestId === null) {
 			turnsSinceAction = 0;
-			todoToolUsedThisTurn = false;
+			touchedTodoIds.clear();
 			return;
 		}
 
@@ -275,12 +275,11 @@ export default function (pi: ExtensionAPI) {
 			turnsSinceAction = 0;
 		}
 
-		todoToolUsedThisTurn = false;
+		touchedTodoIds.clear();
 	});
 
 	pi.on("tool_execution_end", async (event) => {
 		if (!isTodoTool(event.toolName) || event.isError) return;
-		todoToolUsedThisTurn = true;
 		overlay?.update();
 	});
 
@@ -302,6 +301,8 @@ export default function (pi: ExtensionAPI) {
 		async execute(_toolCallId, params, _signal, _onUpdate, _ctx) {
 			const result = applyAction(state, "create", params as Record<string, unknown>);
 			commitState(result.state);
+			const newTask = result.state.tasks[result.state.tasks.length - 1];
+			if (newTask) touchedTodoIds.add(newTask.id);
 			return buildToolResult("create", result);
 		},
 
@@ -338,6 +339,7 @@ export default function (pi: ExtensionAPI) {
 		async execute(_toolCallId, params, _signal, _onUpdate, _ctx) {
 			const result = applyAction(state, "update", params as Record<string, unknown>);
 			commitState(result.state);
+			touchedTodoIds.add(params.id as number);
 			return buildToolResult("update", result);
 		},
 
@@ -393,6 +395,7 @@ export default function (pi: ExtensionAPI) {
 		async execute(_toolCallId, params, _signal, _onUpdate, _ctx) {
 			const result = applyAction(state, "get", params as Record<string, unknown>);
 			commitState(result.state);
+			touchedTodoIds.add(params.id as number);
 			return buildToolResult("get", result);
 		},
 
@@ -420,6 +423,7 @@ export default function (pi: ExtensionAPI) {
 		async execute(_toolCallId, params, _signal, _onUpdate, _ctx) {
 			const result = applyAction(state, "delete", params as Record<string, unknown>);
 			commitState(result.state);
+			touchedTodoIds.add(params.id as number);
 			return buildToolResult("delete", result);
 		},
 
@@ -445,6 +449,7 @@ export default function (pi: ExtensionAPI) {
 		async execute(_toolCallId, _params, _signal, _onUpdate, _ctx) {
 			const result = applyAction(state, "clear", {});
 			commitState(result.state);
+			for (const t of result.state.tasks) touchedTodoIds.add(t.id);
 			return buildToolResult("clear", result);
 		},
 
