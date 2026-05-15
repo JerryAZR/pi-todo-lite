@@ -25,6 +25,63 @@ export interface TodoDetails {
 	error?: string;
 }
 
+// ---------------------------------------------------------------------------
+// Reminder tracking
+// ---------------------------------------------------------------------------
+
+export const REMINDER_INTERVAL = 3;
+
+export interface ReminderState {
+	turnsSinceAction: number;
+	previousOldestId: number | null;
+	wasResetThisTurn: boolean;
+}
+
+export function createReminderState(): ReminderState {
+	return { turnsSinceAction: 0, previousOldestId: null, wasResetThisTurn: false };
+}
+
+function getOldestPendingId(state: TaskState): number | null {
+	const pending = state.tasks.filter((t) => !t.done);
+	return pending[0]?.id ?? null;
+}
+
+export function updateReminderState(
+	reminder: ReminderState,
+	state: TaskState,
+	touchedId?: number,
+	setFlag = true,
+): void {
+	const oldestId = getOldestPendingId(state);
+
+	if (oldestId !== reminder.previousOldestId) {
+		reminder.previousOldestId = oldestId;
+		reminder.turnsSinceAction = 0;
+		if (setFlag) reminder.wasResetThisTurn = true;
+		return;
+	}
+
+	if (oldestId !== null && touchedId === oldestId) {
+		reminder.turnsSinceAction = 0;
+		if (setFlag) reminder.wasResetThisTurn = true;
+		return;
+	}
+
+	if (oldestId === null) {
+		reminder.turnsSinceAction = 0;
+		if (setFlag) reminder.wasResetThisTurn = true;
+		return;
+	}
+}
+
+export function incrementReminderCounter(reminder: ReminderState): void {
+	reminder.turnsSinceAction++;
+}
+
+export function shouldFireReminder(reminder: ReminderState): boolean {
+	return reminder.turnsSinceAction >= REMINDER_INTERVAL;
+}
+
 export type TaskAction = "create" | "update" | "list" | "get" | "delete" | "clear";
 
 export interface ApplyResult {

@@ -8,9 +8,13 @@ import { Text, truncateToWidth, type TUI } from "@mariozechner/pi-tui";
 import { Type } from "typebox";
 import {
 	applyAction,
+	createReminderState,
 	formatTaskLine,
+	incrementReminderCounter,
 	isTodoTool,
 	replayFromBranch,
+	shouldFireReminder,
+	updateReminderState,
 	type Task,
 	type TaskState,
 	type TodoDetails,
@@ -31,13 +35,10 @@ export function commitState(next: TaskState): void {
 }
 
 // ---------------------------------------------------------------------------
-// Reminder tracking — single counter, all logic in agent_end
+// Reminder state (managed by core.ts)
 // ---------------------------------------------------------------------------
 
-const REMINDER_INTERVAL = 3;
-let turnsSinceAction = 0;
-let previousOldestId: number | null = null;
-const touchedTodoIds = new Set<number>();
+const reminder = createReminderState();
 
 function findSubject(id: number): string {
 	return state.tasks.find((t) => t.id === id)?.subject ?? `#${id}`;
@@ -196,15 +197,9 @@ export default function (pi: ExtensionAPI) {
 
 	const syncState = (ctx: ExtensionContext) => {
 		replaceState(replayFromBranch(ctx.sessionManager.getBranch()));
+		updateReminderState(reminder, state, undefined, false);
 		overlay?.reset();
 		overlay?.update();
-
-		const pending = state.tasks.filter((t) => !t.done);
-		const newOldestId = pending[0]?.id ?? null;
-		if (newOldestId !== previousOldestId) {
-			previousOldestId = newOldestId;
-			turnsSinceAction = 0;
-		}
 	};
 
 	pi.on("session_start", async (_event, ctx) => {
@@ -236,46 +231,23 @@ export default function (pi: ExtensionAPI) {
 	});
 
 	pi.on("agent_end", async (_event, ctx) => {
-		const pending = state.tasks.filter((t) => !t.done);
-		const oldest = pending[0] ?? null;
-		const oldestId = oldest?.id ?? null;
-
-		// Oldest task changed — reset baseline
-		if (oldestId !== previousOldestId) {
-			previousOldestId = oldestId;
-			turnsSinceAction = 0;
-			todoToolUsedThisTurn = false;
-			return;
+		if (!reminder.wasResetThisTurn) {
+			incrementReminderCounter(reminder);
 		}
+		reminder.wasResetThisTurn = false;
 
-		// Oldest task was touched this turn — reset counter
-		if (oldestId !== null && touchedTodoIds.has(oldestId)) {
-			turnsSinceAction = 0;
-			touchedTodoIds.clear();
-			return;
+		if (shouldFireReminder(reminder) && !ctx.hasPendingMessages()) {
+			const pending = state.tasks.filter((t) => !t.done);
+			const oldest = pending[0] ?? null;
+			if (oldest) {
+				pi.sendUserMessage(
+					`Reminder: Task #${oldest.id} "${oldest.subject}" is still pending. ` +
+						`If you've completed it, call todo_update with id: ${oldest.id}, done: true.`,
+					{ deliverAs: "followUp" },
+				);
+				reminder.turnsSinceAction = 0;
+			}
 		}
-
-		// No pending tasks — nothing to remind about
-		if (oldestId === null) {
-			turnsSinceAction = 0;
-			touchedTodoIds.clear();
-			return;
-		}
-
-		// Count idle turns
-		turnsSinceAction++;
-
-		// Fire reminder if threshold reached
-		if (turnsSinceAction >= REMINDER_INTERVAL && !ctx.hasPendingMessages()) {
-			pi.sendUserMessage(
-				`Reminder: Task #${oldest.id} "${oldest.subject}" is still pending. ` +
-					`If you've completed it, call todo_update with id: ${oldest.id}, done: true.`,
-				{ deliverAs: "followUp" },
-			);
-			turnsSinceAction = 0;
-		}
-
-		touchedTodoIds.clear();
 	});
 
 	pi.on("tool_execution_end", async (event) => {
@@ -301,8 +273,7 @@ export default function (pi: ExtensionAPI) {
 		async execute(_toolCallId, params, _signal, _onUpdate, _ctx) {
 			const result = applyAction(state, "create", params as Record<string, unknown>);
 			commitState(result.state);
-			const newTask = result.state.tasks[result.state.tasks.length - 1];
-			if (newTask) touchedTodoIds.add(newTask.id);
+			updateReminderState(reminder, result.state);
 			return buildToolResult("create", result);
 		},
 
@@ -339,7 +310,7 @@ export default function (pi: ExtensionAPI) {
 		async execute(_toolCallId, params, _signal, _onUpdate, _ctx) {
 			const result = applyAction(state, "update", params as Record<string, unknown>);
 			commitState(result.state);
-			touchedTodoIds.add(params.id as number);
+			updateReminderState(reminder, result.state, params.id as number);
 			return buildToolResult("update", result);
 		},
 
@@ -395,7 +366,7 @@ export default function (pi: ExtensionAPI) {
 		async execute(_toolCallId, params, _signal, _onUpdate, _ctx) {
 			const result = applyAction(state, "get", params as Record<string, unknown>);
 			commitState(result.state);
-			touchedTodoIds.add(params.id as number);
+			updateReminderState(reminder, result.state, params.id as number);
 			return buildToolResult("get", result);
 		},
 
@@ -423,7 +394,7 @@ export default function (pi: ExtensionAPI) {
 		async execute(_toolCallId, params, _signal, _onUpdate, _ctx) {
 			const result = applyAction(state, "delete", params as Record<string, unknown>);
 			commitState(result.state);
-			touchedTodoIds.add(params.id as number);
+			updateReminderState(reminder, result.state, params.id as number);
 			return buildToolResult("delete", result);
 		},
 
@@ -449,7 +420,7 @@ export default function (pi: ExtensionAPI) {
 		async execute(_toolCallId, _params, _signal, _onUpdate, _ctx) {
 			const result = applyAction(state, "clear", {});
 			commitState(result.state);
-			for (const t of result.state.tasks) touchedTodoIds.add(t.id);
+			updateReminderState(reminder, result.state);
 			return buildToolResult("clear", result);
 		},
 
