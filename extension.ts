@@ -241,8 +241,12 @@ export default function (pi: ExtensionAPI) {
 			const oldest = pending[0] ?? null;
 			if (oldest) {
 				pi.sendUserMessage(
-					`Reminder: Task #${oldest.id} "${oldest.subject}" is still pending. ` +
-						`If you've completed it, call todo_update with id: ${oldest.id}, done: true.`,
+					`<system-reminder>
+Task #${oldest.id} "${oldest.subject}" is still pending. ` +
+						`If you've completed it, call todo_update with id: ${oldest.id}, done: true. ` +
+						`If you are actively working on it but requirements or progress have changed, ` +
+						`update the task or add a note with todo_update accordingly.
+</system-reminder>`,
 					{ deliverAs: "followUp" },
 				);
 				reminder.turnsSinceAction = 0;
