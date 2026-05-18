@@ -24,7 +24,7 @@ import {
 // Module state
 // ---------------------------------------------------------------------------
 
-let state: TaskState = { tasks: [], nextId: 1 };
+let state: TaskState = { tasks: [], nextId: 1, globalCompletions: 0 };
 
 export function replaceState(next: TaskState): void {
 	state = next;
@@ -50,12 +50,13 @@ function findSubject(id: number): string {
 
 const WIDGET_KEY = "todo-lite";
 const MAX_LINES = 10;
+const MAX_SHOW_TASKS = 5;
 
 class TodoOverlay {
 	private uiCtx?: ExtensionUIContext;
 	private registered = false;
 	private tui?: TUI;
-	private hiddenDone = new Set<number>();
+
 
 	setUICtx(ctx: ExtensionUIContext): void {
 		if (ctx !== this.uiCtx) {
@@ -97,15 +98,8 @@ class TodoOverlay {
 		}
 	}
 
-	hideDoneFromPreviousTurn(): void {
-		for (const t of state.tasks) {
-			if (t.done) this.hiddenDone.add(t.id);
-		}
-		this.tui?.requestRender();
-	}
-
 	reset(): void {
-		this.hiddenDone.clear();
+		// no-op: widget now shows all tasks with collapsed sections
 	}
 
 	dispose(): void {
@@ -117,31 +111,43 @@ class TodoOverlay {
 	}
 
 	private visibleTasks(): Task[] {
-		return state.tasks.filter((t) => !this.hiddenDone.has(t.id));
+		return state.tasks;
 	}
 
 	private renderWidget(theme: Theme, width: number): string[] {
 		const all = this.visibleTasks();
 		if (all.length === 0) return [];
 
-		const done = all.filter((t) => t.done).length;
-		const hasPending = all.some((t) => !t.done);
+		// Select: all pending + recently completed tasks (must have completionOrder set)
+		const RECENT_COMPLETED_THRESHOLD = 3;
+		const selected = all.filter(
+			(t) =>
+				!t.done ||
+				(t.completionOrder !== undefined &&
+					state.globalCompletions - t.completionOrder < RECENT_COMPLETED_THRESHOLD),
+		);
+
+		const doneCount = all.filter((t) => t.done).length;
+		const totalCount = all.length;
+
+		const hasPending = selected.some((t) => !t.done);
 		const color = hasPending ? "accent" : "dim";
 		const icon = hasPending ? "●" : "○";
 		const heading = truncateToWidth(
-			`${theme.fg(color, icon)} ${theme.fg(color, `Todos (${done}/${all.length})`)}`,
+			`${theme.fg(color, icon)} ${theme.fg(color, `Todos (${doneCount}/${totalCount})`)}`,
 			width,
 		);
 
-		const lines: string[] = [heading];
-		const budget = MAX_LINES - 1;
-		const slice = all.slice(0, budget);
-		const overflow = all.length - slice.length;
+		// Show up to MAX_SHOW_TASKS selected tasks in internal order
+		const showTasks = selected.slice(0, MAX_SHOW_TASKS);
+		const overflow = selected.length - showTasks.length;
+		const maxIdWidth = Math.max(1, ...showTasks.map((t) => String(t.id).length));
 
-		for (let i = 0; i < slice.length; i++) {
-			const isLast = i === slice.length - 1 && overflow === 0;
+		const lines: string[] = [heading];
+		for (let i = 0; i < showTasks.length; i++) {
+			const isLast = i === showTasks.length - 1 && overflow === 0;
 			const prefix = theme.fg("dim", isLast ? "└─" : "├─");
-			lines.push(truncateToWidth(`${prefix} ${formatWidgetTask(slice[i], theme)}`, width));
+			lines.push(truncateToWidth(`${prefix} ${formatWidgetTask(showTasks[i], theme, maxIdWidth)}`, width));
 		}
 
 		if (overflow > 0) {
@@ -154,10 +160,11 @@ class TodoOverlay {
 	}
 }
 
-function formatWidgetTask(t: Task, theme: Theme): string {
+function formatWidgetTask(t: Task, theme: Theme, maxIdWidth: number): string {
 	const glyph = t.done ? theme.fg("success", "✓") : theme.fg("dim", "○");
+	const id = theme.fg("dim", `${String(t.id).padStart(maxIdWidth, " ")}.`);
 	const subject = t.done ? theme.strikethrough(theme.fg("dim", t.subject)) : t.subject;
-	return `${glyph} ${subject}`;
+	return `${glyph} ${id} ${subject}`;
 }
 
 // ---------------------------------------------------------------------------
@@ -172,6 +179,7 @@ function buildToolResult(
 		action,
 		tasks: result.state.tasks,
 		nextId: result.state.nextId,
+		globalCompletions: result.state.globalCompletions,
 		...(result.error ? { error: result.error } : {}),
 	};
 	return {
@@ -227,7 +235,7 @@ export default function (pi: ExtensionAPI) {
 	});
 
 	pi.on("agent_start", async () => {
-		overlay?.hideDoneFromPreviousTurn();
+		// no-op: widget now shows all tasks with collapsed sections
 	});
 
 	pi.on("agent_end", async (_event, ctx) => {

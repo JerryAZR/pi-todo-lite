@@ -17,8 +17,8 @@ import {
 	type TaskState,
 } from "./core.js";
 
-function state(tasks: TaskState["tasks"], nextId: number): TaskState {
-	return { tasks, nextId };
+function state(tasks: TaskState["tasks"], nextId: number, globalCompletions = 0): TaskState {
+	return { tasks, nextId, globalCompletions };
 }
 
 // ---------------------------------------------------------------------------
@@ -89,7 +89,8 @@ describe("update", () => {
 
 	it("batches multiple fields", () => {
 		const result = applyAction(base, "update", { id: 1, subject: "B", done: true, description: "Desc" });
-		expect(result.state.tasks[0]).toEqual({ id: 1, subject: "B", done: true, description: "Desc" });
+		expect(result.state.tasks[0]).toEqual({ id: 1, subject: "B", done: true, description: "Desc", completionOrder: 0 });
+		expect(result.state.globalCompletions).toBe(1);
 	});
 
 	it("rejects missing id", () => {
@@ -350,10 +351,10 @@ describe("checkReminder", () => {
 		expect(r.turnsSinceAction).toBe(2);
 	});
 
-	it("fires reminder after 3 idle turns and resets counter", () => {
+	it("fires reminder after 4 idle turns and resets counter", () => {
 		const r = createReminderState();
 		r.previousOldestId = 1;
-		r.turnsSinceAction = 2;
+		r.turnsSinceAction = 3;
 		const s = state([{ id: 1, subject: "A", done: false }], 2);
 		const text = checkReminder(r, s);
 		expect(text).not.toBeNull();

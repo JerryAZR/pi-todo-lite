@@ -27,6 +27,7 @@ The pi ecosystem already has capable task tracking extensions (`rpiv-todo`, `@ti
 - **Custom TUI rendering** — Compact `renderCall`/`renderResult` with status glyphs.
 - **`/todos` command** — Quick user inspection grouped by pending/done.
 - **`appendNote`** — Add paragraphs without replacing the full description.
+- **Periodic reminder** — Injects `<system-reminder>` when pending tasks are idle for 4 turns, so the agent doesn't forget to mark tasks done.
 
 ### When to use this
 
@@ -57,6 +58,16 @@ pi -e ./extension.ts
 The LLM can call the todo tools automatically. You can also prompt it explicitly:
 
 > "Track these tasks: refactor auth, update tests, deploy"
+
+### Reminder system
+
+If pending tasks exist and no todo tool has been used for 4 agent turns, a `<system-reminder>` nudge is injected to prompt the agent to mark done tasks or update progress. This prevents tasks from being forgotten during long discussions or non-todo work.
+
+Override the interval with the environment variable:
+
+```bash
+PI_TODO_REMINDER_INTERVAL=6 pi -e ./extension.ts
+```
 
 User commands:
 

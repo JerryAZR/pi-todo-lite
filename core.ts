@@ -11,17 +11,22 @@ export interface Task {
 	subject: string;
 	description?: string;
 	done: boolean;
+	/** Monotonically increasing order when marked done. Used by the widget to show recently completed tasks. */
+	completionOrder?: number;
 }
 
 export interface TaskState {
 	tasks: Task[];
 	nextId: number;
+	/** Next completion order to assign (not a count). Reset on clear. */
+	globalCompletions: number;
 }
 
 export interface TodoDetails {
 	action: string;
 	tasks: Task[];
 	nextId: number;
+	globalCompletions: number;
 	error?: string;
 }
 
@@ -29,7 +34,7 @@ export interface TodoDetails {
 // Reminder tracking — all state and decisions live in core
 // ---------------------------------------------------------------------------
 
-const REMINDER_INTERVAL = 3;
+const REMINDER_INTERVAL = Number(process.env.PI_TODO_REMINDER_INTERVAL) || 4;
 
 export interface ReminderState {
 	turnsSinceAction: number;
@@ -116,7 +121,7 @@ export interface ApplyResult {
 	error?: string;
 }
 
-export const EMPTY_STATE: TaskState = { tasks: [], nextId: 1 };
+export const EMPTY_STATE: TaskState = { tasks: [], nextId: 1, globalCompletions: 0 };
 
 // ---------------------------------------------------------------------------
 // Tool names for replay
@@ -157,7 +162,7 @@ export function applyAction(
 			if (params.description) task.description = String(params.description);
 
 			return ok(
-				{ tasks: [...current.tasks, task], nextId: current.nextId + 1 },
+				{ tasks: [...current.tasks, task], nextId: current.nextId + 1, globalCompletions: current.globalCompletions },
 				`Created #${task.id}: ${task.subject}`,
 			);
 		}
@@ -176,6 +181,7 @@ export function applyAction(
 			if (!hasMutation) return error(current, "update requires at least one field");
 
 			const updated: Task = { ...old };
+			let nextGlobalCompletions = current.globalCompletions;
 
 			if (params.subject !== undefined) updated.subject = String(params.subject).trim();
 			if (params.description !== undefined) {
@@ -188,9 +194,17 @@ export function applyAction(
 					updated.description = updated.description ? `${updated.description}\n\n${note}` : note;
 				}
 			}
-			if (params.done !== undefined) updated.done = Boolean(params.done);
+			if (params.done !== undefined) {
+				const wasDone = old.done;
+				updated.done = Boolean(params.done);
+				if (!wasDone && updated.done) {
+					updated.completionOrder = nextGlobalCompletions++;
+				} else if (wasDone && !updated.done) {
+					updated.completionOrder = undefined;
+				}
+			}
 
-			const next = { tasks: [...current.tasks], nextId: current.nextId };
+			const next = { tasks: [...current.tasks], nextId: current.nextId, globalCompletions: nextGlobalCompletions };
 			next.tasks[idx] = updated;
 			return ok(next, `Updated #${id}`);
 		}
@@ -216,13 +230,13 @@ export function applyAction(
 			const idx = current.tasks.findIndex((t) => t.id === id);
 			if (idx === -1) return error(current, `#${id} not found`);
 			const subject = current.tasks[idx].subject;
-			const next = { tasks: [...current.tasks], nextId: current.nextId };
+			const next = { tasks: [...current.tasks], nextId: current.nextId, globalCompletions: current.globalCompletions };
 			next.tasks.splice(idx, 1);
 			return ok(next, `Deleted #${id}: ${subject}`);
 		}
 
 		case "clear": {
-			return ok({ tasks: [], nextId: 1 }, `Cleared ${current.tasks.length} tasks`);
+			return ok({ tasks: [], nextId: 1, globalCompletions: 0 }, `Cleared ${current.tasks.length} tasks`);
 		}
 
 		default:
@@ -277,6 +291,7 @@ export function replayFromBranch(entries: Iterable<BranchEntry>): TaskState {
 			result = {
 				tasks: details.tasks.map((t) => ({ ...t })),
 				nextId: details.nextId,
+				globalCompletions: details.globalCompletions ?? 0,
 			};
 		}
 	}
