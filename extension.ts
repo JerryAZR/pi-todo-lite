@@ -241,7 +241,10 @@ export default function (pi: ExtensionAPI) {
 	pi.on("agent_end", async (_event, ctx) => {
 		const reminderText = checkReminder(reminder, state);
 		if (reminderText && !ctx.hasPendingMessages()) {
-			pi.sendUserMessage(reminderText, { deliverAs: "followUp" });
+			pi.sendMessage(
+				{ customType: "todo-reminder", content: reminderText, display: false },
+				{ deliverAs: "followUp", triggerTurn: true },
+			);
 		}
 	});
 
