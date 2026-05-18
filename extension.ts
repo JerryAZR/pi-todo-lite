@@ -263,7 +263,7 @@ export default function (pi: ExtensionAPI) {
 		promptSnippet: "Create a task in the todo list",
 		promptGuidelines: [
 			"Use the todo tools when the user gives you a list of tasks, or when tracking complex multi-step work. Skip them for single trivial tasks and purely conversational requests.",
-			"If the list already contains tasks from a previous project, call todo_clear before creating new tasks for a different multi-step work.",
+			"When beginning a new multi-step work, call todo_clear first to start a fresh list.",
 		],
 		parameters: Type.Object({
 			subject: Type.String({ description: "Short imperative subject line" }),
