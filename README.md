@@ -16,13 +16,13 @@ The pi ecosystem already has capable task tracking extensions (`rpiv-todo`, `@ti
 | File-backed persistence with locking, shared lists | Session branch replay only — no external files |
 | i18n (8 locales) | English only |
 | `owner`, `metadata`, `activeForm` fields | Dropped — only `subject` + `description` |
-| 7 tools, 2000+ lines | 6 tools, ~750 lines |
+| 7 tools, 2000+ lines | 6 tools, ~1150 lines |
 | Massive prompt descriptions (Claude Code-style) | One-sentence descriptions, tight schemas |
 
 ### What was kept (the good parts)
 
 - **Multi-tool design** — `todo_create`, `todo_update`, `todo_list`, `todo_get`, `todo_delete`, `todo_clear`. Each has a tight schema with no dead-weight parameters.
-- **Persistent overlay widget** — Shows tasks above the editor, hides completed after each turn to stay compact.
+- **Persistent overlay widget** — Shows pending tasks and recently completed tasks above the editor, filtered by completion order.
 - **Branch-aware replay** — State stored in tool result `details`, reconstructed from the session branch on start/tree/compact. Forking and tree navigation always show the correct task list for that point in history.
 - **Custom TUI rendering** — Compact `renderCall`/`renderResult` with status glyphs.
 - **`/todos` command** — Quick user inspection grouped by pending/done.
@@ -61,12 +61,12 @@ The LLM can call the todo tools automatically. You can also prompt it explicitly
 
 ### Reminder system
 
-If pending tasks exist and no todo tool has been used for 4 agent turns, a `<system-reminder>` nudge is injected to prompt the agent to mark done tasks or update progress. This prevents tasks from being forgotten during long discussions or non-todo work.
+If pending tasks exist and no todo tool has been used for a while, a `<system-reminder>` nudge is injected to prompt the agent to mark done tasks or update progress. This prevents tasks from being forgotten during long discussions or non-todo work. Reminders are triggered by accumulated token usage, not by a fixed turn count.
 
-Override the interval with the environment variable:
+Override the threshold with the environment variable:
 
 ```bash
-PI_TODO_REMINDER_INTERVAL=6 pi -e ./extension.ts
+PI_TODO_REMINDER_TOKENS=12000 pi -e ./extension.ts
 ```
 
 User commands:

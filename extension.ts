@@ -2,9 +2,9 @@
  * extension.ts — Pi integration layer. Wires core logic into the agent.
  */
 
-import { StringEnum } from "@mariozechner/pi-ai";
-import type { ExtensionAPI, ExtensionContext, ExtensionUIContext, Theme } from "@mariozechner/pi-coding-agent";
-import { Text, truncateToWidth, type TUI } from "@mariozechner/pi-tui";
+import { StringEnum } from "@earendil-works/pi-ai";
+import type { ExtensionAPI, ExtensionContext, ExtensionUIContext, Theme } from "@earendil-works/pi-coding-agent";
+import { Text, truncateToWidth, type TUI } from "@earendil-works/pi-tui";
 import { Type } from "typebox";
 import {
 	accumulateTokens,
@@ -189,7 +189,13 @@ function buildToolResult(
 	};
 }
 
-function renderTodoResult(result: { details?: unknown }, theme: Theme): Text {
+function renderTodoResult(
+	_result: unknown,
+	_options: unknown,
+	theme: Theme,
+	_context: unknown,
+): Text {
+	const result = _result as { details?: unknown };
 	const details = result.details as TodoDetails | undefined;
 	if (details?.error) {
 		return new Text(theme.fg("error", `Error: ${details.error}`), 0, 0);

@@ -4,12 +4,12 @@
 
 | Topic | Path |
 |-------|------|
-| **Extensions API** | `~\AppData\Roaming\npm\node_modules\@mariozechner\pi-coding-agent\docs\extensions.md` |
-| **TUI / Custom rendering** | `~\AppData\Roaming\npm\node_modules\@mariozechner\pi-coding-agent\docs\tui.md` |
-| **Themes** | `~\AppData\Roaming\npm\node_modules\@mariozechner\pi-coding-agent\docs\themes.md` |
-| **Keybindings** | `~\AppData\Roaming\npm\node_modules\@mariozechner\pi-coding-agent\docs\keybindings.md` |
-| **Sessions / branching** | `~\AppData\Roaming\npm\node_modules\@mariozechner\pi-coding-agent\docs\sessions.md` |
-| **Examples** | `~\AppData\Roaming\npm\node_modules\@mariozechner\pi-coding-agent\examples\extensions\` |
+| **Extensions API** | `~\AppData\Roaming\npm\node_modules\@earendil-works\pi-coding-agent\docs\extensions.md` |
+| **TUI / Custom rendering** | `~\AppData\Roaming\npm\node_modules\@earendil-works\pi-coding-agent\docs\tui.md` |
+| **Themes** | `~\AppData\Roaming\npm\node_modules\@earendil-works\pi-coding-agent\docs\themes.md` |
+| **Keybindings** | `~\AppData\Roaming\npm\node_modules\@earendil-works\pi-coding-agent\docs\keybindings.md` |
+| **Sessions / branching** | `~\AppData\Roaming\npm\node_modules\@earendil-works\pi-coding-agent\docs\sessions.md` |
+| **Examples** | `~\AppData\Roaming\npm\node_modules\@earendil-works\pi-coding-agent\examples\extensions\` |
 
 The **extensions.md** doc is the canonical reference for:
 - All lifecycle events (`session_start`, `tool_call`, `tool_result`, `agent_start`, etc.)
@@ -28,11 +28,11 @@ The **tui.md** doc covers:
 
 | Example | What it demonstrates | Path |
 |---------|---------------------|------|
-| `todo.ts` | Stateful tool with persistence, `renderCall`/`renderResult`, `/command` | `~\AppData\Roaming\npm\node_modules\@mariozechner\pi-coding-agent\examples\extensions\todo.ts` |
-| `dynamic-tools.ts` | Register tools after startup | `~\AppData\Roaming\npm\node_modules\@mariozechner\pi-coding-agent\examples\extensions\dynamic-tools.ts` |
-| `widget-placement.ts` | Widget above/below editor | `~\AppData\Roaming\npm\node_modules\@mariozechner\pi-coding-agent\examples\extensions\widget-placement.ts` |
-| `permission-gate.ts` | `tool_call` event blocking | `~\AppData\Roaming\npm\node_modules\@mariozechner\pi-coding-agent\examples\extensions\permission-gate.ts` |
-| `custom-compaction.ts` | `session_before_compact` / `session_compact` | `~\AppData\Roaming\npm\node_modules\@mariozechner\pi-coding-agent\examples\extensions\custom-compaction.ts` |
+| `todo.ts` | Stateful tool with persistence, `renderCall`/`renderResult`, `/command` | `~\AppData\Roaming\npm\node_modules\@earendil-works\pi-coding-agent\examples\extensions\todo.ts` |
+| `dynamic-tools.ts` | Register tools after startup | `~\AppData\Roaming\npm\node_modules\@earendil-works\pi-coding-agent\examples\extensions\dynamic-tools.ts` |
+| `widget-placement.ts` | Widget above/below editor | `~\AppData\Roaming\npm\node_modules\@earendil-works\pi-coding-agent\examples\extensions\widget-placement.ts` |
+| `permission-gate.ts` | `tool_call` event blocking | `~\AppData\Roaming\npm\node_modules\@earendil-works\pi-coding-agent\examples\extensions\permission-gate.ts` |
+| `custom-compaction.ts` | `session_before_compact` / `session_compact` | `~\AppData\Roaming\npm\node_modules\@earendil-works\pi-coding-agent\examples\extensions\custom-compaction.ts` |
 
 ## Project-specific notes
 

@@ -304,7 +304,7 @@ export interface BranchEntry {
 }
 
 export function replayFromBranch(entries: Iterable<BranchEntry>): TaskState {
-	let result: TaskState = { tasks: [...EMPTY_STATE.tasks], nextId: EMPTY_STATE.nextId };
+	let result: TaskState = { tasks: [...EMPTY_STATE.tasks], nextId: EMPTY_STATE.nextId, globalCompletions: EMPTY_STATE.globalCompletions };
 	for (const entry of entries) {
 		if (entry.type !== "message") continue;
 		const msg = entry.message;

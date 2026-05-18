@@ -10,10 +10,49 @@
     "type": "git",
     "url": "git@github.com:JerryAZR/pi-todo-lite.git"
   },
+  "homepage": "https://github.com/JerryAZR/pi-todo-lite#readme",
+  "bugs": {
+    "url": "https://github.com/JerryAZR/pi-todo-lite/issues"
+  },
+  "keywords": [
+    "pi-package",
+    "pi-extension",
+    "pi",
+    "todo",
+    "task",
+    "tracker"
+  ],
+  "pi": {
+    "extensions": [
+      "./extension.ts"
+    ]
+  },
+  "files": [
+    "core.ts",
+    "extension.ts",
+    "core.test.ts",
+    "vitest.config.ts",
+    "README.md",
+    "LICENSE",
+    "AGENTS.md"
+  ],
   "scripts": {
-    "test": "vitest run"
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "typebox": "^1.1.34"
+  },
+  "peerDependencies": {
+    "@earendil-works/pi-ai": ">=0.73.0",
+    "@earendil-works/pi-coding-agent": ">=0.73.0",
+    "@earendil-works/pi-tui": ">=0.73.0"
   },
   "devDependencies": {
+    "@earendil-works/pi-ai": "^0.75.3",
+    "@earendil-works/pi-coding-agent": "^0.75.3",
+    "@earendil-works/pi-tui": "^0.75.3",
+    "@types/node": "^22.19.19",
     "typescript": "^5.4.0",
     "vitest": "^2.0.0"
   }
