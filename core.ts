@@ -219,9 +219,10 @@ export function applyAction(
 						parts.push(`next: #${nextAfter.id} "${nextAfter.subject}"`);
 					}
 					if (oldest) {
-						parts.push(`oldest: #${oldest.id} "${oldest.subject}"`);
+						const label = nextAfter?.id === oldest.id ? "next" : "oldest";
+						parts.push(`${label}: #${oldest.id} "${oldest.subject}"`);
 					}
-					content += `. ${pending.length} pending (${parts.join("; ")})`;
+					content += `\n${pending.length} pending (${parts.join("; ")})`;
 				}
 			}
 			return ok(next, content);

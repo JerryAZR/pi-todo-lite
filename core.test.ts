@@ -91,6 +91,7 @@ describe("update", () => {
 		const result = applyAction(base, "update", { id: 1, subject: "B", done: true, description: "Desc" });
 		expect(result.state.tasks[0]).toEqual({ id: 1, subject: "B", done: true, description: "Desc", completionOrder: 0 });
 		expect(result.state.globalCompletions).toBe(1);
+		expect(result.content).toBe("Updated #1");
 	});
 
 	it("rejects missing id", () => {
@@ -106,6 +107,31 @@ describe("update", () => {
 	it("rejects empty mutation", () => {
 		const result = applyAction(base, "update", { id: 1 });
 		expect(result.error).toBe("update requires at least one field");
+	});
+
+	it("shows next pending on new line when marking done (next === oldest)", () => {
+		const s = state(
+			[
+				{ id: 1, subject: "A", done: false },
+				{ id: 2, subject: "B", done: false },
+			],
+			3,
+		);
+		const result = applyAction(s, "update", { id: 1, done: true });
+		expect(result.content).toBe('Updated #1\n1 pending (next: #2 "B")');
+	});
+
+	it("shows next and oldest when they differ", () => {
+		const s = state(
+			[
+				{ id: 1, subject: "A", done: false },
+				{ id: 2, subject: "B", done: false },
+				{ id: 3, subject: "C", done: false },
+			],
+			4,
+		);
+		const result = applyAction(s, "update", { id: 2, done: true });
+		expect(result.content).toBe('Updated #2\n2 pending (next: #3 "C"; oldest: #1 "A")');
 	});
 });
 

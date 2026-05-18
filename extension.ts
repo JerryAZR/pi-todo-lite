@@ -313,7 +313,17 @@ export default function (pi: ExtensionAPI) {
 		renderCall(args, theme, _context) {
 			let text = theme.fg("toolTitle", theme.bold("todo_update ")) + theme.fg("muted", "→");
 			if (args.id !== undefined) {
-				text += ` ${theme.fg("accent", findSubject(Number(args.id)))}`;
+				const task = state.tasks.find((t) => t.id === Number(args.id));
+				const glyph = task?.done ? theme.fg("success", "✓") : theme.fg("dim", "○");
+				text += ` ${glyph} ${theme.fg("accent", findSubject(Number(args.id)))}`;
+				const fields: string[] = [];
+				if (args.done !== undefined) fields.push("done");
+				if (args.subject !== undefined) fields.push("subject");
+				if (args.description !== undefined) fields.push("description");
+				if (args.appendNote !== undefined) fields.push("note");
+				if (fields.length > 0) {
+					text += ` ${theme.fg("muted", `(${fields.join(", ")})`)}`;
+				}
 			}
 			return new Text(text, 0, 0);
 		},
