@@ -1,6 +1,6 @@
 # @jerryan/pi-todo-lite
 
-A lightweight task tracker for the [pi coding agent](https://github.com/badlogic/pi-mono).
+A lightweight task tracker for the [pi coding agent](https://pi.dev/).
 
 ## Design philosophy: intentional minimalism
 

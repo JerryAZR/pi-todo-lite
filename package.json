@@ -30,8 +30,6 @@
   "files": [
     "core.ts",
     "extension.ts",
-    "core.test.ts",
-    "vitest.config.ts",
     "README.md",
     "LICENSE",
     "AGENTS.md"
