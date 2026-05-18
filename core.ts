@@ -34,16 +34,16 @@ export interface TodoDetails {
 // Reminder tracking — all state and decisions live in core
 // ---------------------------------------------------------------------------
 
-const REMINDER_INTERVAL = Number(process.env.PI_TODO_REMINDER_INTERVAL) || 4;
+const TOKEN_THRESHOLD = Number(process.env.PI_TODO_REMINDER_TOKENS) || 8000;
 
 export interface ReminderState {
-	turnsSinceAction: number;
+	tokensSinceAction: number;
 	previousOldestId: number | null;
 	lastTouchedId: number | null;
 }
 
 export function createReminderState(): ReminderState {
-	return { turnsSinceAction: 0, previousOldestId: null, lastTouchedId: null };
+	return { tokensSinceAction: 0, previousOldestId: null, lastTouchedId: null };
 }
 
 function getOldestPendingId(state: TaskState): number | null {
@@ -56,7 +56,7 @@ export function syncReminderState(reminder: ReminderState, state: TaskState): vo
 	const oldestId = getOldestPendingId(state);
 	if (oldestId !== reminder.previousOldestId) {
 		reminder.previousOldestId = oldestId;
-		reminder.turnsSinceAction = 0;
+		reminder.tokensSinceAction = 0;
 		reminder.lastTouchedId = null;
 	}
 }
@@ -66,40 +66,44 @@ export function markTodoTouched(reminder: ReminderState, taskId: number): void {
 	reminder.lastTouchedId = taskId;
 }
 
-/** Called at the end of an agent turn. Updates state and returns a reminder string, or null. */
+/** Accumulate token usage from a turn. Called from turn_end handler. */
+export function accumulateTokens(reminder: ReminderState, tokens: number): void {
+	reminder.tokensSinceAction += tokens;
+}
+
+/** Check if the token threshold is exceeded and return a reminder string, or null. */
 export function checkReminder(reminder: ReminderState, state: TaskState): string | null {
 	const oldestId = getOldestPendingId(state);
 
 	// Oldest task changed — reset baseline
 	if (oldestId !== reminder.previousOldestId) {
 		reminder.previousOldestId = oldestId;
-		reminder.turnsSinceAction = 0;
+		reminder.tokensSinceAction = 0;
 		reminder.lastTouchedId = null;
 		return null;
 	}
 
 	// No pending tasks — nothing to remind about
 	if (oldestId === null) {
-		reminder.turnsSinceAction = 0;
+		reminder.tokensSinceAction = 0;
 		reminder.lastTouchedId = null;
 		return null;
 	}
 
 	// Oldest task was touched this turn — reset counter
 	if (reminder.lastTouchedId === oldestId) {
-		reminder.turnsSinceAction = 0;
+		reminder.tokensSinceAction = 0;
 		reminder.lastTouchedId = null;
 		return null;
 	}
 
-	// Count idle turns
-	reminder.turnsSinceAction++;
+	// Clear touched flag (tokens are accumulated externally)
 	reminder.lastTouchedId = null;
 
 	// Fire reminder if threshold reached
-	if (reminder.turnsSinceAction >= REMINDER_INTERVAL) {
+	if (reminder.tokensSinceAction >= TOKEN_THRESHOLD) {
 		const oldest = state.tasks.find((t) => t.id === oldestId)!;
-		reminder.turnsSinceAction = 0;
+		reminder.tokensSinceAction = 0;
 		return (
 			`<system-reminder>\n` +
 			`Task #${oldest.id} "${oldest.subject}" is still pending. ` +

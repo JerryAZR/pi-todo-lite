@@ -4,6 +4,7 @@
 
 import { describe, expect, it } from "vitest";
 import {
+	accumulateTokens,
 	applyAction,
 	checkReminder,
 	createReminderState,
@@ -312,20 +313,20 @@ describe("formatTaskDetail", () => {
 describe("syncReminderState", () => {
 	it("resets counter when oldest changes", () => {
 		const r = createReminderState();
-		r.turnsSinceAction = 2;
+		r.tokensSinceAction = 2000;
 		const s = state([{ id: 1, subject: "A", done: false }], 2);
 		syncReminderState(r, s);
 		expect(r.previousOldestId).toBe(1);
-		expect(r.turnsSinceAction).toBe(0);
+		expect(r.tokensSinceAction).toBe(0);
 	});
 
 	it("preserves counter when oldest unchanged", () => {
 		const r = createReminderState();
 		r.previousOldestId = 1;
-		r.turnsSinceAction = 2;
+		r.tokensSinceAction = 2000;
 		const s = state([{ id: 1, subject: "A", done: false }], 2);
 		syncReminderState(r, s);
-		expect(r.turnsSinceAction).toBe(2);
+		expect(r.tokensSinceAction).toBe(2000);
 	});
 });
 
@@ -337,64 +338,73 @@ describe("markTodoTouched", () => {
 	});
 });
 
+describe("accumulateTokens", () => {
+	it("adds tokens to counter", () => {
+		const r = createReminderState();
+		accumulateTokens(r, 1000);
+		expect(r.tokensSinceAction).toBe(1000);
+		accumulateTokens(r, 500);
+		expect(r.tokensSinceAction).toBe(1500);
+	});
+});
+
 describe("checkReminder", () => {
 	it("returns null and resets when no pending tasks", () => {
 		const r = createReminderState();
-		r.turnsSinceAction = 5;
+		r.tokensSinceAction = 10000;
 		const s = state([], 1);
 		expect(checkReminder(r, s)).toBeNull();
-		expect(r.turnsSinceAction).toBe(0);
+		expect(r.tokensSinceAction).toBe(0);
 	});
 
 	it("returns null and resets when oldest changes", () => {
 		const r = createReminderState();
 		r.previousOldestId = 1;
-		r.turnsSinceAction = 5;
+		r.tokensSinceAction = 10000;
 		const s = state([{ id: 2, subject: "B", done: false }], 3);
 		expect(checkReminder(r, s)).toBeNull();
 		expect(r.previousOldestId).toBe(2);
-		expect(r.turnsSinceAction).toBe(0);
+		expect(r.tokensSinceAction).toBe(0);
 	});
 
 	it("returns null and resets when oldest was touched this turn", () => {
 		const r = createReminderState();
 		r.previousOldestId = 1;
 		r.lastTouchedId = 1;
-		r.turnsSinceAction = 5;
+		r.tokensSinceAction = 10000;
 		const s = state([{ id: 1, subject: "A", done: false }], 2);
 		expect(checkReminder(r, s)).toBeNull();
-		expect(r.turnsSinceAction).toBe(0);
+		expect(r.tokensSinceAction).toBe(0);
 		expect(r.lastTouchedId).toBeNull();
 	});
 
-	it("increments counter on idle turns", () => {
+	it("does not fire below threshold", () => {
 		const r = createReminderState();
 		r.previousOldestId = 1;
+		r.tokensSinceAction = 5000;
 		const s = state([{ id: 1, subject: "A", done: false }], 2);
 		expect(checkReminder(r, s)).toBeNull();
-		expect(r.turnsSinceAction).toBe(1);
-		expect(checkReminder(r, s)).toBeNull();
-		expect(r.turnsSinceAction).toBe(2);
+		expect(r.tokensSinceAction).toBe(5000);
 	});
 
-	it("fires reminder after 4 idle turns and resets counter", () => {
+	it("fires reminder when threshold exceeded and resets counter", () => {
 		const r = createReminderState();
 		r.previousOldestId = 1;
-		r.turnsSinceAction = 3;
+		r.tokensSinceAction = 9000;
 		const s = state([{ id: 1, subject: "A", done: false }], 2);
 		const text = checkReminder(r, s);
 		expect(text).not.toBeNull();
 		expect(text).toContain("Task #1 \"A\" is still pending");
 		expect(text).toContain("<system-reminder>");
 		expect(text).toContain("</system-reminder>");
-		expect(r.turnsSinceAction).toBe(0);
+		expect(r.tokensSinceAction).toBe(0);
 	});
 
-	it("does not fire when a non-oldest task was touched", () => {
+	it("fires when a non-oldest task was touched (tokens still accumulated)", () => {
 		const r = createReminderState();
 		r.previousOldestId = 1;
 		r.lastTouchedId = 2;
-		r.turnsSinceAction = 5;
+		r.tokensSinceAction = 9000;
 		const s = state(
 			[
 				{ id: 1, subject: "A", done: false },
@@ -402,7 +412,8 @@ describe("checkReminder", () => {
 			],
 			3,
 		);
-		expect(checkReminder(r, s)).not.toBeNull();
-		expect(r.turnsSinceAction).toBe(0);
+		const text = checkReminder(r, s);
+		expect(text).not.toBeNull();
+		expect(r.tokensSinceAction).toBe(0);
 	});
 });

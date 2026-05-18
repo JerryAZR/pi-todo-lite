@@ -7,6 +7,7 @@ import type { ExtensionAPI, ExtensionContext, ExtensionUIContext, Theme } from "
 import { Text, truncateToWidth, type TUI } from "@mariozechner/pi-tui";
 import { Type } from "typebox";
 import {
+	accumulateTokens,
 	applyAction,
 	checkReminder,
 	createReminderState,
@@ -234,16 +235,16 @@ export default function (pi: ExtensionAPI) {
 		overlay = undefined;
 	});
 
-	pi.on("agent_start", async () => {
-		// no-op: widget now shows all tasks with collapsed sections
-	});
-
-	pi.on("agent_end", async (_event, ctx) => {
+	pi.on("turn_end", async (event, ctx) => {
+		const msg = event.message as any;
+		if (msg?.usage) {
+			accumulateTokens(reminder, (msg.usage.input ?? 0) + (msg.usage.output ?? 0));
+		}
 		const reminderText = checkReminder(reminder, state);
 		if (reminderText && !ctx.hasPendingMessages()) {
 			pi.sendMessage(
 				{ customType: "todo-reminder", content: reminderText, display: false },
-				{ deliverAs: "followUp", triggerTurn: true },
+				{ deliverAs: "steer", triggerTurn: true },
 			);
 		}
 	});
