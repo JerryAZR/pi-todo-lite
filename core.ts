@@ -182,6 +182,7 @@ export function applyAction(
 
 			const updated: Task = { ...old };
 			let nextGlobalCompletions = current.globalCompletions;
+			const wasDone = old.done;
 
 			if (params.subject !== undefined) updated.subject = String(params.subject).trim();
 			if (params.description !== undefined) {
@@ -195,7 +196,6 @@ export function applyAction(
 				}
 			}
 			if (params.done !== undefined) {
-				const wasDone = old.done;
 				updated.done = Boolean(params.done);
 				if (!wasDone && updated.done) {
 					updated.completionOrder = nextGlobalCompletions++;
@@ -206,7 +206,25 @@ export function applyAction(
 
 			const next = { tasks: [...current.tasks], nextId: current.nextId, globalCompletions: nextGlobalCompletions };
 			next.tasks[idx] = updated;
-			return ok(next, `Updated #${id}`);
+
+			let content = `Updated #${id}`;
+			if (!wasDone && updated.done) {
+				const pending = next.tasks.filter((t) => !t.done);
+				const oldest = pending[0] ?? null;
+				// Next pending after the just-completed task (in list order)
+				const nextAfter = pending.find((t) => t.id > id) ?? null;
+				if (oldest || nextAfter) {
+					const parts: string[] = [];
+					if (nextAfter && nextAfter.id !== oldest?.id) {
+						parts.push(`next: #${nextAfter.id} "${nextAfter.subject}"`);
+					}
+					if (oldest) {
+						parts.push(`oldest: #${oldest.id} "${oldest.subject}"`);
+					}
+					content += `. ${pending.length} pending (${parts.join("; ")})`;
+				}
+			}
+			return ok(next, content);
 		}
 
 		case "list": {
