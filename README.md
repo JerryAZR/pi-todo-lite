@@ -27,7 +27,7 @@ The pi ecosystem already has capable task tracking extensions (`rpiv-todo`, `@ti
 - **Custom TUI rendering** — Compact `renderCall`/`renderResult` with status glyphs.
 - **`/todos` command** — Quick user inspection grouped by pending/done.
 - **`appendNote`** — Add paragraphs without replacing the full description.
-- **Periodic reminder** — Injects `<system-reminder>` when pending tasks are idle for 4 turns, so the agent doesn't forget to mark tasks done.
+- **Periodic reminder** — Injects `<system-reminder>` when pending tasks have been idle past a token-usage threshold, so the agent doesn't forget to mark tasks done.
 
 ### When to use this
 
